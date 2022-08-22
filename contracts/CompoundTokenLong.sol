@@ -4,17 +4,17 @@ pragma solidity >=0.7.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Interfaces/CAsset.sol";
 import "./Interfaces/Comptroller.sol";
-import "./interfaces/Uniswap.sol";
+import "./Interfaces/Uniswap.sol";
 
-//longing in eth with borrowing DAI from compound ,and then exchanging DAI with WETH .
+//longing in Token with borrowing DAI from compound ,and then exchanging DAI with WETH .
 
 contract CompoundLonging {
 
-   CEth public cEth;
-   CErc20 public ctoken;
+   CErc20 public cTokenSupply;
 
    CErc20 public cTokenBorrow;
    IERC20 public tokenBorrow;
+   IERC20 public TokenSupply;
    uint public decimals;
 
    Comptroller public comptroller =
@@ -25,27 +25,28 @@ contract CompoundLonging {
     IUniswapV2Router private constant UNI = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
     IERC20 private constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
   
-   constructor  (address _cEth,
+   constructor  (address _cTokenToSupply,
+    address _TokenToSupply,
     address _cTokenBorrow,
     address _tokenBorrow,
     uint _decimals)
     {
-    cEth = CEth(_cEth);
+    TokenSupply = IERC20(_TokenToSupply);
+    cTokenSupply = CErc20(_cTokenToSupply);
     cTokenBorrow = CErc20(_cTokenBorrow);
     tokenBorrow = IERC20(_tokenBorrow);
     decimals = _decimals;
 
     }
 
-   receive() external payable {}
+     receive() external payable {}
 
 
-    function supply() external payable {
-            cEth.mint{value: msg.value}();
+    function supply(uint _amount) external payable {
 
-        // enter market to enable borrow
+            cTokenSupply.mint(_amount);
         address[] memory cTokens = new address[](1);
-        cTokens[0] = address(cEth);
+        cTokens[0] = address(cTokenSupply);
         uint[] memory errors = comptroller.enterMarkets(cTokens);
         require(errors[0] == 0, "Comptroller.enterMarkets failed.");
    }
@@ -75,7 +76,7 @@ contract CompoundLonging {
 
     address[] memory path = new address[](2);
     path[0] = address(tokenBorrow);
-    path[1] = address(WETH);
+    path[1] = address(TokenSupply);
     UNI.swapExactTokensForETH(bal, 1, path, address(this), block.timestamp);
   }
 
@@ -84,6 +85,7 @@ contract CompoundLonging {
     address[] memory path = new address[](2);
     path[0] = address(WETH);
     path[1] = address(tokenBorrow);
+
     UNI.swapExactETHForTokens{value: address(this).balance}(
       1,
       path,
