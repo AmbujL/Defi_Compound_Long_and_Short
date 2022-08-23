@@ -10,20 +10,31 @@ import "./Interfaces/Uniswap.sol";
 
 contract CompoundLonging {
 
-   CErc20 public cTokenSupply;
+ enum supplyAsset {Eth, Token}
 
+  struct AssetLonging{
+    supplyAsset state;
+    IERC20  TokenSupply;
+    IERC20  tokenBorrow;
+    CErc20  cTokenSupply;
+    CErc20  cTokenBorrow;
+    uint  decimals;
+
+  }
+  mapping (address =>mapping(address => AssetLonging)) public Registry;
+
+   CErc20 public cTokenSupply;   //cEth or CTokenSupply
    CErc20 public cTokenBorrow;
    IERC20 public tokenBorrow;
-   IERC20 public TokenSupply;
+   IERC20 public TokenSupply;    // not required on cEth ( transfering )
+   CEth public cETh ;
    uint public decimals;
 
-   Comptroller public comptroller =
-    Comptroller(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
+   Comptroller public comptroller = Comptroller(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
-      PriceFeed public priceFeed = PriceFeed(0x922018674c12a7F0D394ebEEf9B58F186CdE13c1);
-
-    IUniswapV2Router private constant UNI = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-    IERC20 private constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+   PriceFeed public priceFeed = PriceFeed(0x922018674c12a7F0D394ebEEf9B58F186CdE13c1);
+   IUniswapV2Router private constant UNI = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+   IERC20 private constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
   
    constructor  (address _cTokenToSupply,
     address _TokenToSupply,
@@ -42,9 +53,34 @@ contract CompoundLonging {
      receive() external payable {}
 
 
-    function supply(uint _amount) external payable {
+     function initialize(address _assetToSupply , address _assetToBorrow) external {
+      
+        AssetLonging storage assetlong = Registry[_assetToSupply][_assetToBorrow];
 
-            cTokenSupply.mint(_amount);
+      if(_assetToSupply == address(0)){
+        assetlong.state= supplyAsset.Token;
+
+      }
+     }
+
+  function supplyEth(address _assetToSupply,address _assetToBorrow ) external payable {
+      AssetLonging memory assetlong = Registry[_assetToSupply][_assetToBorrow];
+       require(assetlong.state != supplyAsset.Token, "Not Eligible for Eth supply");
+            cETh.mint{value : msg.value};
+        address[] memory cTokens = new address[](1);
+        cTokens[0] = address(cETh);
+        uint[] memory errors = comptroller.enterMarkets(cTokens);
+        require(errors[0] == 0, "Comptroller.enterMarkets failed.");
+   }
+
+
+
+    function supplyToken(address _assetToSupply , address _assetToBorrow, uint _amount) external  {
+
+       AssetLonging memory assetlong = Registry[_assetToSupply][_assetToBorrow];
+       require(assetlong.state != supplyAsset.Eth, "Not Eligible for Token supply");
+
+        cTokenSupply.mint(_amount);
         address[] memory cTokens = new address[](1);
         cTokens[0] = address(cTokenSupply);
         uint[] memory errors = comptroller.enterMarkets(cTokens);
@@ -67,15 +103,19 @@ contract CompoundLonging {
   }
 
 
-  function long(uint _borrowAmount) external {
+  function long(address _assetToSupply , address _assetToBorrow, uint _borrowAmount) external {
+
+     AssetLonging memory assetlong = Registry[_assetToSupply][_assetToBorrow];
+    //   require(assetlong.state != supplyAsset.Eth, "Not Eligible for Token supply");
     // borrow
     require(cTokenBorrow.borrow(_borrowAmount) == 0, "borrow failed");
     // buy ETH
-    uint bal = tokenBorrow.balanceOf(address(this));
-    tokenBorrow.approve(address(UNI), bal);
+    uint bal = assetlong.tokenBorrow.balanceOf(address(this));
+    assetlong.tokenBorrow.approve(address(UNI), bal);
 
     address[] memory path = new address[](2);
     path[0] = address(tokenBorrow);
+
     path[1] = address(TokenSupply);
     UNI.swapExactTokensForETH(bal, 1, path, address(this), block.timestamp);
   }
@@ -83,7 +123,7 @@ contract CompoundLonging {
   function repay() external {
     // sell ETH
     address[] memory path = new address[](2);
-    path[0] = address(WETH);
+    path[0] = address(TokenSupply);
     path[1] = address(tokenBorrow);
 
     UNI.swapExactETHForTokens{value: address(this).balance}(
@@ -97,15 +137,15 @@ contract CompoundLonging {
     tokenBorrow.approve(address(cTokenBorrow), borrowed);
     require(cTokenBorrow.repayBorrow(borrowed) == 0, "repay failed");
 
-    uint supplied = cEth.balanceOfUnderlying(address(this));
-    require(cEth.redeemUnderlying(supplied) == 0, "redeem failed");
+    uint supplied = cTokenSupply.balanceOfUnderlying(address(this));
+    require(cTokenSupply.redeemUnderlying(supplied) == 0, "redeem failed");
 
     // supplied ETH + supplied interest + profit (in token borrow)
   }
 
   // not view function
   function getSuppliedBalance() external returns (uint) {
-    return cEth.balanceOfUnderlying(address(this));
+    return cTokenSupply.balanceOfUnderlying(address(this));
   }
 
   // not view function
