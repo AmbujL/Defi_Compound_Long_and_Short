@@ -13,7 +13,7 @@ contract CompoundLonging {
  enum SupplyAsset {Eth, Token}
     SupplyAsset state;
 
-
+  address public manager;
    CErc20 public cTokenSupply;   //cEth or CTokenSupply
    CErc20 public cTokenBorrow;
    IERC20 public tokenBorrow;
@@ -26,7 +26,16 @@ contract CompoundLonging {
    PriceFeed public priceFeed = PriceFeed(0x922018674c12a7F0D394ebEEf9B58F186CdE13c1);
    IUniswapV2Router private constant UNI = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
    IERC20 private constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-  
+
+
+    modifier onlyManager{
+      require(manager == msg.sender,"Only Manager can access ");
+      _;
+    }
+
+      constructor(){
+        manager= msg.sender;
+      }
 
      receive() external payable {}
 
@@ -36,8 +45,7 @@ contract CompoundLonging {
     address _cTokenBorrow,
     address _tokenBorrow,
     uint _decimals
-
-     ) external {
+     ) onlyManager external {
 
       TokenSupply = IERC20(_TokenToSupply);
     cTokenSupply = CErc20(_cTokenToSupply);
@@ -48,7 +56,8 @@ contract CompoundLonging {
       if(_TokenToSupply == address(0)){
         state= SupplyAsset.Token;
       }
-
+      else 
+          state= SupplyAsset.Eth;
      }
 
     function supplyEth() external payable {
