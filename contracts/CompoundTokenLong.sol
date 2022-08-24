@@ -11,7 +11,10 @@ import "./Interfaces/Uniswap.sol";
 contract CompoundLonging {
 
  enum SupplyAsset {Eth, Token}
-    SupplyAsset state;
+ enum State {Idle,Running, Finished}
+
+  State currentPhase;
+  SupplyAsset assetType;
 
   address public manager;
    CErc20 public cTokenSupply;   //cEth or CTokenSupply
@@ -33,6 +36,11 @@ contract CompoundLonging {
       _;
     }
 
+    modifier checkPhase{
+      require(currentPhase !=State.Running,"Only Manager can access ");
+      _;
+    }
+
       constructor(){
         manager= msg.sender;
       }
@@ -45,30 +53,33 @@ contract CompoundLonging {
     address _cTokenBorrow,
     address _tokenBorrow,
     uint _decimals
-     ) onlyManager external {
+     ) onlyManager checkPhase external {
 
       TokenSupply = IERC20(_TokenToSupply);
     cTokenSupply = CErc20(_cTokenToSupply);
     cTokenBorrow = CErc20(_cTokenBorrow);
     tokenBorrow = IERC20(_tokenBorrow);
     decimals = _decimals;
+    currentPhase = State.Running;
 
       if(_TokenToSupply == address(0)){
-        state= SupplyAsset.Token;
+        assetType= SupplyAsset.Token;
       }
       else 
-          state= SupplyAsset.Eth;
+          assetType= SupplyAsset.Eth;
      }
 
+
+
     function supplyEth() external payable {
-       require(state != SupplyAsset.Token, "Not Eligible for Eth supply");
+       require(assetType != SupplyAsset.Token, "Not Eligible for Eth supply");
             cEth.mint{value : msg.value};
             enterMarket(address(cEth));   
    }
 
 
     function supplyToken( uint _amount) external  {
-         require(state==SupplyAsset.Token,"Not Eligible for Token supply");
+         require(assetType==SupplyAsset.Token,"Not Eligible for Token supply");
         cTokenSupply.mint(_amount);
          enterMarket(address(cTokenSupply)); 
    }
@@ -100,7 +111,7 @@ contract CompoundLonging {
   function long( uint _borrowAmount) external {
 
     //  AssetLonging memory assetlong = Registry[_assetToSupply][_assetToBorrow];
-    //   require(assetlong.state != supplyAsset.Eth, "Not Eligible for Token supply");
+    //   require(assetlong.assetType != supplyAsset.Eth, "Not Eligible for Token supply");
 
     // borrow
     require(cTokenBorrow.borrow(_borrowAmount) == 0, "borrow failed");
@@ -110,12 +121,12 @@ contract CompoundLonging {
 
     address[] memory path = new address[](2);
     path[0] = address(tokenBorrow);
-    if(state==SupplyAsset.Eth)
+    if(assetType==SupplyAsset.Eth)
     {
          path[1] = address(WETH);
         UNI.swapExactTokensForETH(bal, 1, path, address(this), block.timestamp);
     }
-    else if(state==SupplyAsset.Token )
+    else if(assetType==SupplyAsset.Token )
     {
       path[1] = address(TokenSupply);
       UNI.swapExactTokensForTokens(bal, 1, path, address(this), block.timestamp);
@@ -133,7 +144,7 @@ contract CompoundLonging {
     address[] memory path = new address[](2);
      path[1] = address(tokenBorrow);
 
-     if(state==SupplyAsset.Eth)
+     if(assetType==SupplyAsset.Eth)
      {
        path[0] = address(WETH);
         UNI.swapExactETHForTokens{value: address(this).balance}(
@@ -143,7 +154,7 @@ contract CompoundLonging {
       block.timestamp
     );
      }
-     else if (state==SupplyAsset.Token )
+     else if (assetType==SupplyAsset.Token )
      {
         path[0] = address(TokenSupply);
         uint bal = TokenSupply.balanceOf(address(this));
@@ -165,12 +176,14 @@ contract CompoundLonging {
     uint supplied = cTokenSupply.balanceOfUnderlying(address(this));
     require(cTokenSupply.redeemUnderlying(supplied) == 0, "redeem failed");
 
+    currentPhase = State.Finished;
+
     // supplied ETH + supplied interest + profit (in token borrow)
   }
 
   // not view function
   function getSuppliedBalance() external returns (uint) {
-   return  state==SupplyAsset.Token ? 
+   return  assetType==SupplyAsset.Token ? 
    cTokenSupply.balanceOfUnderlying(address(this)): cEth.balanceOfUnderlying(address(this));
   }
 
