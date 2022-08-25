@@ -49,24 +49,27 @@ contract CompoundLonging {
 
 
      function initialize(address _cTokenToSupply,
-    address _TokenToSupply,
+    address _tokenToSupply,
     address _cTokenBorrow,
     address _tokenBorrow,
     uint _decimals
      ) onlyManager checkPhase external {
-
-      TokenSupply = IERC20(_TokenToSupply);
-    cTokenSupply = CErc20(_cTokenToSupply);
+    
     cTokenBorrow = CErc20(_cTokenBorrow);
     tokenBorrow = IERC20(_tokenBorrow);
     decimals = _decimals;
     currentPhase = State.Running;
 
-      if(_TokenToSupply == address(0)){
+      if(_tokenToSupply == address(0)){
         assetType= SupplyAsset.Token;
+        cEth  = CEth(_cTokenToSupply);
       }
-      else 
-          assetType= SupplyAsset.Eth;
+      else {
+         assetType= SupplyAsset.Eth;
+        TokenSupply = IERC20(_tokenToSupply);
+        cTokenSupply = CErc20(_cTokenToSupply);
+      }
+         
      }
 
 
