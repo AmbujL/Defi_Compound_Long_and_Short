@@ -6,8 +6,8 @@ const Provider = require("@truffle/hdwallet-provider");
 
 
 const address = process.env.ADDRESS;
-const privateKey = process.env.PrivateKey;
-const ethEndPointURL = process.env.EThRopstenEndpoint;
+const privateKey = process.env.PRIVATEKEY;
+const ethEndPointURL = process.env.ETH_ROPSTEN_URL;
 
  const provider = new Provider(privateKey, ethEndPointURL);
   const web3 = new Web3(provider);
@@ -19,10 +19,16 @@ const ethEndPointURL = process.env.EThRopstenEndpoint;
 
 const long = async () => {
 
-    contract.methods.initialize(ropstenAddress.Contracts.cETH, 0,
-      ropstenAddress.Contracts.cUSDT, ropstenAddress.Contracts.USDT).send({ from: address }).then((response) => {
+    contract.methods
+      .initialize(
+        ropstenAddress.Contracts.cETH,
+        process.env.ZERO_ADDRESS,
+        ropstenAddress.Contracts.cUSDT,
+        ropstenAddress.Contracts.USDT
+      )
+      .send({ from: address })
+      .then((response) => {
         console.log(response?.event?.Initialized);
-        
       });
   
   contract.methods.supplyEth().send({ from: address, value: 1 * 10 ** 18 }).then((response) => {

@@ -34,6 +34,7 @@ contract CompoundLonging {
     event Initialized (SupplyAsset assetType ,IERC20 _tokenToBorrow , uint _time);
     event AssetSupplied(SupplyAsset assetType , uint _time );
     event Long(SupplyAsset assetType ,IERC20 _tokenToBorrow , uint _borrowAmount, uint _time );
+    event Repaid(SupplyAsset assetType , uint remainingethbalance , uint remainingToken , uint time);
 
 
     modifier onlyManager{
@@ -177,7 +178,7 @@ contract CompoundLonging {
       address(this),
       block.timestamp
     );
-
+    emit Repaid(assetType,address(this).balance, tokenBorrow.balanceOf(address(this)), block.timestamp); 
      }
     
     // repay borrow
