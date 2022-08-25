@@ -18,7 +18,6 @@ const ethEndPointURL = process.env.EThRopstenEndpoint;
   );
 
 const long = async () => {
- 
 
     contract.methods.initialize(ropstenAddress.Contracts.cETH, 0,
       ropstenAddress.Contracts.cUSDT, ropstenAddress.Contracts.USDT).send({ from: address }).then((response) => {
