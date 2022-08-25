@@ -20,7 +20,7 @@ contract CompoundLonging {
    CErc20 public cTokenSupply;   //cEth or CTokenSupply
    CErc20 public cTokenBorrow;
    IERC20 public tokenBorrow;
-   IERC20 public TokenSupply;    // not required on cEth ( transfering )
+   IERC20 public tokenSupply;    // not required on cEth ( transfering )
    CEth public cEth ;
    uint public decimals;
 
@@ -29,6 +29,11 @@ contract CompoundLonging {
    PriceFeed public priceFeed = PriceFeed(0x922018674c12a7F0D394ebEEf9B58F186CdE13c1);
    IUniswapV2Router private constant UNI = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
    IERC20 private constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+
+    event Initialized (SupplyAsset assetType ,IERC20 _tokenToBorrow , uint _time);
+    event AssetSupplied(SupplyAsset assetType , uint _time );
+    event Long(SupplyAsset assetType ,IERC20 _tokenToBorrow , uint _borrowAmount, uint _time );
 
 
     modifier onlyManager{
@@ -50,13 +55,13 @@ contract CompoundLonging {
 
      function initialize(address _cTokenToSupply,
     address _tokenToSupply,
-    address _cTokenBorrow,
-    address _tokenBorrow,
+    address _cTokenToBorrow,
+    address _tokenToBorrow,
     uint _decimals
      ) onlyManager checkPhase external {
     
-    cTokenBorrow = CErc20(_cTokenBorrow);
-    tokenBorrow = IERC20(_tokenBorrow);
+    cTokenBorrow = CErc20(_cTokenToBorrow);
+    tokenBorrow = IERC20(_tokenToBorrow);
     decimals = _decimals;
     currentPhase = State.Running;
 
@@ -66,9 +71,11 @@ contract CompoundLonging {
       }
       else {
          assetType= SupplyAsset.Eth;
-        TokenSupply = IERC20(_tokenToSupply);
+        tokenSupply = IERC20(_tokenToSupply);
         cTokenSupply = CErc20(_cTokenToSupply);
       }
+
+      emit Initialized(assetType,tokenBorrow, block.timestamp);
          
      }
 
@@ -77,7 +84,8 @@ contract CompoundLonging {
     function supplyEth() external payable {
        require(assetType != SupplyAsset.Token, "Not Eligible for Eth supply");
             cEth.mint{value : msg.value};
-            enterMarket(address(cEth));   
+            enterMarket(address(cEth));  
+            emit AssetSupplied(assetType,block.timestamp); 
    }
 
 
@@ -85,6 +93,7 @@ contract CompoundLonging {
          require(assetType==SupplyAsset.Token,"Not Eligible for Token supply");
         cTokenSupply.mint(_amount);
          enterMarket(address(cTokenSupply)); 
+         emit AssetSupplied(assetType,block.timestamp);
    }
 
    function enterMarket (address  cAsset) internal {
@@ -131,19 +140,19 @@ contract CompoundLonging {
     }
     else if(assetType==SupplyAsset.Token )
     {
-      path[1] = address(TokenSupply);
+      path[1] = address(tokenSupply);
       UNI.swapExactTokensForTokens(bal, 1, path, address(this), block.timestamp);
     }
      
+     emit Long(assetType,tokenBorrow, _borrowAmount, block.timestamp);
+
   }
 
 
 
   function repay() external {
     // sell ETH
-
-    //  AssetLonging memory assetlong = Registry[_assetToSupply][_assetToBorrow];
-     
+     require(currentPhase == State.Running,"Trade Asset is not initialized");
     address[] memory path = new address[](2);
      path[1] = address(tokenBorrow);
 
@@ -159,9 +168,9 @@ contract CompoundLonging {
      }
      else if (assetType==SupplyAsset.Token )
      {
-        path[0] = address(TokenSupply);
-        uint bal = TokenSupply.balanceOf(address(this));
-        TokenSupply.approve(address(UNI), bal);
+        path[0] = address(tokenSupply);
+        uint bal = tokenSupply.balanceOf(address(this));
+        tokenSupply.approve(address(UNI), bal);
           UNI.swapExactTokensForTokens(bal,
       1,
       path,
